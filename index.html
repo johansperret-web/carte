@@ -3,43 +3,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/proj4@2.9.2/dist/proj4.js"></script>
-<script src="https://unpkg.com/georaster@1.6.0/dist/georaster.browser.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/georaster-layer-for-leaflet@3.10.0/dist/v3/webpack/bundle/georaster-layer-for-leaflet.min.js"></script>
-<style>
-html,body,#map{height:100%;margin:0}
-#msg{position:absolute;top:10px;left:50px;right:10px;z-index:1000;background:#fff;padding:8px;border-radius:6px;font:14px sans-serif}
-</style>
-</head><body><div id="map"></div><div id="msg">Chargement…</div>
+<style>html,body,#map{height:100%;margin:0}</style>
+</head><body><div id="map"></div>
 <script>
-const msg = document.getElementById('msg');
-const map = L.map('map', {maxZoom: 23}).setView([44.420066, 4.081510], 18);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:23, maxNativeZoom:19}).addTo(map);
-
-function findLayerClass(){
-  let C = window.GeoRasterLayer;
-  if (C && typeof C !== 'function' && C.default) C = C.default;
-  if (typeof C === 'function') return C;
-  if (typeof L.GeoRasterLayer === 'function') return L.GeoRasterLayer;
-  return null;
-}
-
-fetch('plantation.tiff')
-  .then(r => { if(!r.ok) throw new Error('Fichier introuvable (HTTP ' + r.status + ')'); return r.arrayBuffer(); })
-  .then(buf => parseGeoraster(buf))
-  .then(g => {
-    const C = findLayerClass();
-    if(!C){
-      const noms = Object.keys(window).filter(k => /raster/i.test(k)).join(', ');
-      throw new Error('Classe introuvable. Noms trouvés : [' + noms + '] ; projection ' + g.projection + ', ' + g.numberOfRasters + ' bande(s)');
-    }
-    msg.textContent = 'OK : projection ' + g.projection + ', ' + g.numberOfRasters + ' bande(s), ' + g.width + 'x' + g.height + ' px';
-    const layer = new C({georaster: g, opacity: 1, resolution: 256});
-    layer.addTo(map);
-    map.fitBounds(layer.getBounds());
-  })
-  .catch(err => { msg.textContent = 'Erreur : ' + err.message; });
-
+// emprise de ton image : [[sud, ouest], [nord, est]]
+const bounds = [[44.4189028, 4.07969014], [44.4210742, 4.08288015]];
+const map = L.map('map').fitBounds(bounds);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+L.imageOverlay('plantation.jpg', bounds).addTo(map);
 map.locate({watch:true, enableHighAccuracy:true});
 let marker;
 map.on('locationfound', e => {
