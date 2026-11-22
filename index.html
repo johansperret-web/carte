@@ -9,7 +9,7 @@
 // emprise de ton image : [[sud, ouest], [nord, est]]
 const bounds = [[44.419612001, 4.080849108], [44.420925724, 4.082655887]];
 const map = L.map('map').fitBounds(bounds);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:23}).addTo(map);
 L.imageOverlay('plantation.jpg', bounds).addTo(map);
 map.locate({watch:true, enableHighAccuracy:true});
 let marker;
