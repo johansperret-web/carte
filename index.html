@@ -6,12 +6,21 @@
 <style>html,body,#map{height:100%;margin:0}</style>
 </head><body><div id="map"></div>
 <script>
-// emprise de ton image : [[sud, ouest], [nord, est]]
+// GARDE TES VALEURS : [[sud, ouest], [nord, est]]
 const bounds = [[44.419612001, 4.080849108], [44.420925724, 4.082655887]];
-const map = L.map('map').fitBounds(bounds);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:23}).addTo(map);
-L.imageOverlay('plantation.jpg', bounds).addTo(map);
-  grille.getElement().style.mixBlendMode = 'multiply';
+
+const map = L.map('map', {maxZoom: 23}).fitBounds(bounds);
+
+const plan = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  {maxZoom:23, maxNativeZoom:19, attribution:'© OpenStreetMap'});
+const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  {maxZoom:23, maxNativeZoom:19, attribution:'Esri, Maxar, Earthstar Geographics'});
+sat.addTo(map);
+
+const grille = L.imageOverlay('plantation.jpg', bounds, {opacity:0.8}).addTo(map);
+
+L.control.layers({'Satellite':sat, 'Plan':plan}, {'Ma carte':grille}).addTo(map);
+
 map.locate({watch:true, enableHighAccuracy:true});
 let marker;
 map.on('locationfound', e => {
