@@ -3,11 +3,43 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<style>html,body,#map{height:100%;margin:0}</style>
-</head><body><div id="map"></div>
+<style>
+html,body,#map{height:100%;margin:0}
+#titre{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:1000;
+  background:rgba(255,255,255,.9);padding:6px 14px;border-radius:6px;
+  font:bold 15px sans-serif;text-align:center;max-width:70%}
+#legende{position:absolute;bottom:30px;left:10px;z-index:1000;
+  background:rgba(255,255,255,.9);padding:8px 10px;border-radius:6px;font:12px sans-serif}
+#legende .nom{font-weight:bold;margin-bottom:6px}
+#legende .corps{display:flex;gap:8px;align-items:stretch}
+#legende .barre{width:18px;height:140px;border:1px solid #888;
+  background:linear-gradient(to top,#2b83ba,#abdda4,#ffffbf,#fdae61,#d7191c)}
+#legende .valeurs{display:flex;flex-direction:column;justify-content:space-between}
+</style>
+</head><body>
+<div id="map"></div>
+<div id="titre"></div>
+<div id="legende">
+  <div class="nom" id="lg-nom"></div>
+  <div class="corps">
+    <div class="barre"></div>
+    <div class="valeurs"><span id="lg-max"></span><span id="lg-mid"></span><span id="lg-min"></span></div>
+  </div>
+</div>
 <script>
-// GARDE TES VALEURS : [[sud, ouest], [nord, est]]
+// ===== A MODIFIER =====
+const TITRE   = 'Plantation – Ca';
+const LEGENDE = 'NOM (unité)';
+const VMIN = 0;     // valeur de la couleur bleue
+const VMAX = 100;   // valeur de la couleur rouge
 const bounds = [[44.419612001, 4.080849108], [44.420925724, 4.082655887]];
+// ======================
+
+document.getElementById('titre').textContent = TITRE;
+document.getElementById('lg-nom').textContent = LEGENDE;
+document.getElementById('lg-max').textContent = VMAX;
+document.getElementById('lg-mid').textContent = (VMIN + VMAX) / 2;
+document.getElementById('lg-min').textContent = VMIN;
 
 const map = L.map('map', {maxZoom: 23}).fitBounds(bounds);
 
@@ -17,8 +49,7 @@ const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Wo
   {maxZoom:23, maxNativeZoom:19, attribution:'Esri, Maxar, Earthstar Geographics'});
 sat.addTo(map);
 
-const grille = L.imageOverlay('plantation.png', bounds).addTo(map);
-
+const grille = L.imageOverlay('plantation.png', bounds, {opacity:0.8}).addTo(map);
 L.control.layers({'Satellite':sat, 'Plan':plan}, {'Ma carte':grille}).addTo(map);
 
 map.locate({watch:true, enableHighAccuracy:true});
@@ -28,3 +59,4 @@ map.on('locationfound', e => {
   else marker.setLatLng(e.latlng);
 });
 </script></body></html>
+
