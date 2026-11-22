@@ -13,7 +13,7 @@ html,body,#map{height:100%;margin:0}
 </head><body><div id="map"></div><div id="msg">Chargement…</div>
 <script>
 const msg = document.getElementById('msg');
-const map = L.map('map', {maxZoom: 23}).setView([44.420066, 4.081510], 18);
+const map = L.map('map', {maxZoom: 28}).setView([44.420066, 4.081510], 18);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:23, maxNativeZoom:19}).addTo(map);
 
 function findLayerClass(){
