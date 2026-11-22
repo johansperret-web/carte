@@ -7,7 +7,7 @@
 </head><body><div id="map"></div>
 <script>
 // emprise de ton image : [[sud, ouest], [nord, est]]
-const bounds = [[44.4199524, 4.08080708], [44.4208416, 4.08403026]];
+const bounds = [[44.419612001, 4.080849108], [44.420925724, 4.082655887]];
 const map = L.map('map').fitBounds(bounds);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
 L.imageOverlay('plantation.jpg', bounds).addTo(map);
