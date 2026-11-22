@@ -34,7 +34,7 @@ fetch('plantation.tiff')
       throw new Error('Classe introuvable. Noms trouvés : [' + noms + '] ; projection ' + g.projection + ', ' + g.numberOfRasters + ' bande(s)');
     }
     msg.textContent = 'OK : projection ' + g.projection + ', ' + g.numberOfRasters + ' bande(s), ' + g.width + 'x' + g.height + ' px';
-    const layer = new C({georaster: g, opacity: 1, resolution: 256});
+    const layer = new C({georaster: g, opacity: 1, resolution: 1024});
     layer.addTo(map);
     map.fitBounds(layer.getBounds());
   })
