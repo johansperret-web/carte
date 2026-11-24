@@ -2,6 +2,12 @@
 <html><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#137a1e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Carte">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/shpjs@4.0.4/dist/shp.min.js"></script>
@@ -19,16 +25,27 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh}
 #zone{position:relative;flex:1 1 auto;min-height:0}
 #map{position:absolute;inset:0;z-index:0}
 
-/* Ligne d'outils en haut : menu des cartes + bouton des couches */
-#outils{position:absolute;top:calc(env(safe-area-inset-top,0px) + 10px);left:10px;right:10px;
-  z-index:1000;display:flex;gap:8px;align-items:center;justify-content:flex-end;pointer-events:none}
-#outils > *{pointer-events:auto}
-#barre{flex:0 1 auto;height:40px;box-sizing:border-box;background:rgba(255,255,255,.95);
-  border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.4);padding:0 8px;display:flex;align-items:center;min-width:0}
-#choix{font:bold 15px sans-serif;border:0;background:transparent;color:#000;max-width:60vw;height:100%}
-#btn-couches{flex:0 0 auto;width:40px;height:40px;border:0;border-radius:8px;background:#fff;
+/* Menu des cartes : centré en haut */
+#barre{position:absolute;top:calc(env(safe-area-inset-top,0px) + 10px);left:50%;
+  transform:translateX(-50%);z-index:1000;height:40px;box-sizing:border-box;
+  background:rgba(255,255,255,.95);border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.4);
+  padding:0 8px;display:flex;align-items:center}
+#choix{font:bold 15px sans-serif;border:0;background:transparent;color:#000;max-width:50vw;height:100%}
+
+/* Bouton des couches : en haut à droite */
+#btn-couches{position:absolute;top:calc(env(safe-area-inset-top,0px) + 10px);right:10px;
+  z-index:1000;width:40px;height:40px;border:0;border-radius:8px;background:#fff;
   box-shadow:0 1px 4px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;
   cursor:pointer;padding:0}
+
+/* Réglage d'opacité : en bas à droite */
+#opacite{position:absolute;bottom:12px;right:10px;z-index:1000;display:flex;flex-direction:column;
+  align-items:center;background:#fff;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.4);overflow:hidden}
+#opacite button{width:40px;height:40px;border:0;background:#fff;font:bold 22px sans-serif;
+  color:#222;cursor:pointer;padding:0}
+#opacite button:active{background:#e6e6e6}
+#op-val{font:bold 11px sans-serif;color:#444;padding:2px 0;border-top:1px solid #ddd;
+  border-bottom:1px solid #ddd;width:100%;text-align:center}
 
 /* Panneau des couches */
 #panneau{display:none;position:absolute;top:calc(env(safe-area-inset-top,0px) + 58px);right:10px;
@@ -54,13 +71,18 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh}
 <div id="zone">
   <div id="map"></div>
 
-  <div id="outils">
-    <div id="barre"><select id="choix"></select></div>
-    <button id="btn-couches" aria-label="Couches">
-      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#137a1e" stroke-width="2" stroke-linejoin="round">
-        <path d="M12 3 2 8l10 5 10-5-10-5z"/><path d="M2 12l10 5 10-5"/><path d="M2 16l10 5 10-5"/>
-      </svg>
-    </button>
+  <div id="barre"><select id="choix"></select></div>
+
+  <button id="btn-couches" aria-label="Couches">
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#137a1e" stroke-width="2" stroke-linejoin="round">
+      <path d="M12 3 2 8l10 5 10-5-10-5z"/><path d="M2 12l10 5 10-5"/><path d="M2 16l10 5 10-5"/>
+    </svg>
+  </button>
+
+  <div id="opacite">
+    <button id="op-plus" aria-label="Plus opaque">+</button>
+    <div id="op-val">100%</div>
+    <button id="op-moins" aria-label="Plus transparent">−</button>
   </div>
 
   <div id="panneau">
@@ -78,7 +100,6 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh}
 <a id="bas" href="https://www.appsheet.com/start/072b8903-c281-49cd-8af6-a737949a85c4">← Retour à l'App</a>
 
 
-  
 <script>
 // ================= A MODIFIER =================
 
@@ -103,16 +124,19 @@ const CARTES = [
 ];
 
 // Une ligne par shapefile (zip avec .shp .shx .dbf .prj à la racine).
-// Chaque ligne apparaît avec une case à cocher dans le panneau des couches.
 const VECTEURS = [
   {nom:'Terrasses', fichier:'Terrasses.zip', couleur:'#ffff00', epaisseur:2},
-  {nom:'Arbres',    fichier:'arbres.zip',    couleur:'#ff00ff', rayon:2}
+  {nom:'Arbres',    fichier:'arbres.zip',    couleur:'#ff00ff', rayon:1}
 ];
+
+// Opacité de départ des cartes (1 = pleine) et pas des boutons + / −
+let opacite = 1;
+const PAS_OPACITE = 0.1;
 
 // ==============================================
 
+// Pas de boutons de zoom : on zoome avec deux doigts (ou la molette sur ordinateur)
 const map = L.map('map', {maxZoom:23, attributionControl:false, zoomControl:false}).fitBounds(bounds);
-L.control.zoom({position:'bottomright'}).addTo(map);
 
 map.createPane('raster');
 map.getPane('raster').style.zIndex = 250;
@@ -160,7 +184,7 @@ let overlay = null;
 function afficher(i){
   const c = CARTES[i];
   if(overlay) map.removeLayer(overlay);
-  overlay = L.imageOverlay(c.fichier, c.bounds || bounds, {opacity:1, pane:'raster'}).addTo(map);
+  overlay = L.imageOverlay(c.fichier, c.bounds || bounds, {opacity:opacite, pane:'raster'}).addTo(map);
 
   document.getElementById('lg-nom').textContent = c.unite;
   document.getElementById('lg-barre').style.background = c.degrade || DEGRADE_DEFAUT;
@@ -173,7 +197,22 @@ function afficher(i){
 select.addEventListener('change', () => afficher(select.value));
 afficher(0);
 
-// ---- Vecteurs (shapefiles) : cases à cocher créées d'avance ----
+// ---- Boutons + / − : opacité de la carte ----
+function majOpacite(){
+  document.getElementById('op-val').textContent = Math.round(opacite * 100) + '%';
+  if(overlay) overlay.setOpacity(opacite);
+}
+document.getElementById('op-plus').addEventListener('click', () => {
+  opacite = Math.min(1, +(opacite + PAS_OPACITE).toFixed(2));
+  majOpacite();
+});
+document.getElementById('op-moins').addEventListener('click', () => {
+  opacite = Math.max(0.1, +(opacite - PAS_OPACITE).toFixed(2));
+  majOpacite();
+});
+majOpacite();
+
+// ---- Vecteurs (shapefiles) ----
 VECTEURS.forEach(v => {
   v.couche = null;
   v.visible = true;
