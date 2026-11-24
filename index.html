@@ -88,7 +88,7 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh}
   <div id="panneau">
     <h4>Fond de carte</h4><div id="liste-fonds"></div>
     <h4>Éléments sur la carte</h4><div id="liste-couches"></div>
-    <div class="credits">Fonds : Esri, Maxar, Earthstar Geographics · © OpenStreetMap contributors · Leaflet</div>
+    <div class="credits">Fonds : Esri, Maxar, Earthstar Geographics · Photographies aériennes et cadastre © IGN/Géoplateforme · © OpenStreetMap contributors · Leaflet</div>
   </div>
 
   <div id="legende">
@@ -98,7 +98,6 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh}
 </div>
 
 <a id="bas" href="https://www.appsheet.com/start/072b8903-c281-49cd-8af6-a737949a85c4">← Retour à l'App</a>
-
 
 <script>
 // ================= A MODIFIER =================
@@ -124,9 +123,10 @@ const CARTES = [
 ];
 
 // Une ligne par shapefile (zip avec .shp .shx .dbf .prj à la racine).
+// Chaque ligne apparaît avec une case à cocher dans le panneau des couches.
 const VECTEURS = [
   {nom:'Terrasses', fichier:'Terrasses.zip', couleur:'#ffff00', epaisseur:2},
-  {nom:'Arbres',    fichier:'arbres.zip',    couleur:'#ff00ff', rayon:1}
+  {nom:'Arbres',    fichier:'arbres.zip',    couleur:'#ff0000', rayon:1}
 ];
 
 // Opacité de départ des cartes (1 = pleine) et pas des boutons + / −
@@ -138,11 +138,17 @@ const PAS_OPACITE = 0.1;
 // Pas de boutons de zoom : on zoome avec deux doigts (ou la molette sur ordinateur)
 const map = L.map('map', {maxZoom:23, attributionControl:false, zoomControl:false}).fitBounds(bounds);
 
+// Niveaux d'affichage : cartes de sol (250) < cadastre (300) < vecteurs (400)
 map.createPane('raster');
 map.getPane('raster').style.zIndex = 250;
+map.createPane('cadastre');
+map.getPane('cadastre').style.zIndex = 300;
 
+// Fonds de carte
 const plan = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:23, maxNativeZoom:19});
 const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  {maxZoom:23, maxNativeZoom:19});
+const ign = L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
   {maxZoom:23, maxNativeZoom:19});
 sat.addTo(map);
 
@@ -164,7 +170,12 @@ function ligne(type, name, texte, coche, onchange){
   return l;
 }
 
-const FONDS = [{nom:'Satellite', couche:sat}, {nom:'Plan', couche:plan}];
+// Le premier de la liste est celui affiché au départ (il doit correspondre au addTo ci-dessus)
+const FONDS = [
+  {nom:'Satellite Esri', couche:sat},
+  {nom:'Satellite IGN',  couche:ign},
+  {nom:'Plan',           couche:plan}
+];
 FONDS.forEach((f, idx) => {
   document.getElementById('liste-fonds').appendChild(
     ligne('radio', 'fond', f.nom, idx === 0, c => {
@@ -226,10 +237,16 @@ VECTEURS.forEach(v => {
     .then(r => { if(!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
     .then(buf => shp(buf))
     .then(geojson => {
+      const rayon = v.rayon || 5;
       v.couche = L.geoJSON(geojson, {
         style: {color: v.couleur, weight: v.epaisseur || 2, fillOpacity: 0.1},
-        pointToLayer: (f, latlng) => L.circleMarker(latlng,
-          {radius: v.rayon || 5, color: '#fff', weight: 1, fillColor: v.couleur, fillOpacity: 1}),
+        pointToLayer: (f, latlng) => L.circleMarker(latlng, {
+          radius: rayon,
+          color: '#fff',
+          weight: rayon <= 2 ? 0 : 1,   // pas de contour blanc pour les très petits points
+          fillColor: v.couleur,
+          fillOpacity: 1
+        }),
         onEachFeature: (f, layer) => {
           const p = f.properties || {};
           const texte = Object.keys(p).map(k => '<b>' + k + '</b> : ' + p[k]).join('<br>');
@@ -245,6 +262,20 @@ VECTEURS.forEach(v => {
       l.append(' (indisponible)');
     });
 });
+
+// ---- Cadastre IGN (parcelles), case décochée au départ ----
+const cadastre = L.tileLayer.wms('https://data.geopf.fr/wms-r/wms', {
+  layers: 'CADASTRALPARCELS.PARCELLAIRE_EXPRESS',
+  format: 'image/png',
+  transparent: true,
+  version: '1.3.0',
+  maxZoom: 23,
+  pane: 'cadastre'
+});
+document.getElementById('liste-couches').appendChild(
+  ligne('checkbox', null, 'Cadastre (parcelles)', false,
+    on => on ? map.addLayer(cadastre) : map.removeLayer(cadastre))
+);
 
 // ---- Position GPS ----
 map.locate({watch:true, enableHighAccuracy:true});
