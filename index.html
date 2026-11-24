@@ -10,31 +10,30 @@
 html,body{height:100%;margin:0;overflow:hidden;font-family:sans-serif}
 body{display:flex;flex-direction:column;height:100vh;height:100dvh}
 
-/* Bandes vertes */
-#haut,#bas{flex:0 0 auto;background:var(--vert);color:#fff}
-#haut{display:flex;justify-content:flex-end;align-items:center;
-  padding:calc(env(safe-area-inset-top,0px) + 4px) 8px 4px}
-#bas{display:block;text-align:center;text-decoration:none;font-size:15px;
+/* Bande verte du bas */
+#bas{flex:0 0 auto;background:var(--vert);color:#fff;display:block;text-align:center;
+  text-decoration:none;font-size:15px;
   padding:6px 8px calc(env(safe-area-inset-bottom,0px) + 6px)}
-
-/* Bouton couches */
-#btn-couches{width:36px;height:36px;border:0;border-radius:8px;background:#fff;
-  display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
 
 /* Zone carte */
 #zone{position:relative;flex:1 1 auto;min-height:0}
 #map{position:absolute;inset:0;z-index:0}
 
-/* Menu des cartes (boîte blanche flottante) */
-#barre{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:1000;
-  background:rgba(255,255,255,.95);padding:6px 10px;border-radius:6px;
-  box-shadow:0 1px 4px rgba(0,0,0,.4)}
-#choix{font:bold 15px sans-serif;padding:4px;border:0;background:transparent;max-width:55vw;color:#000}
+/* Ligne d'outils en haut : menu des cartes + bouton des couches */
+#outils{position:absolute;top:calc(env(safe-area-inset-top,0px) + 10px);left:10px;right:10px;
+  z-index:1000;display:flex;gap:8px;align-items:center;justify-content:flex-end;pointer-events:none}
+#outils > *{pointer-events:auto}
+#barre{flex:0 1 auto;height:40px;box-sizing:border-box;background:rgba(255,255,255,.95);
+  border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.4);padding:0 8px;display:flex;align-items:center;min-width:0}
+#choix{font:bold 15px sans-serif;border:0;background:transparent;color:#000;max-width:60vw;height:100%}
+#btn-couches{flex:0 0 auto;width:40px;height:40px;border:0;border-radius:8px;background:#fff;
+  box-shadow:0 1px 4px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;
+  cursor:pointer;padding:0}
 
 /* Panneau des couches */
-#panneau{display:none;position:absolute;top:8px;right:8px;z-index:1100;background:#fff;
-  border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.4);padding:10px 14px;font-size:14px;
-  max-width:75vw;color:#222}
+#panneau{display:none;position:absolute;top:calc(env(safe-area-inset-top,0px) + 58px);right:10px;
+  z-index:1100;background:#fff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.4);
+  padding:10px 14px;font-size:14px;max-width:75vw;color:#222}
 #panneau.ouvert{display:block}
 #panneau h4{margin:10px 0 4px;font-size:13px;color:#555}
 #panneau h4:first-child{margin-top:0}
@@ -52,30 +51,34 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh}
 </style>
 </head><body>
 
-<div id="haut">
-  <button id="btn-couches" aria-label="Couches">
-    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#137a1e" stroke-width="2" stroke-linejoin="round">
-      <path d="M12 3 2 8l10 5 10-5-10-5z"/><path d="M2 12l10 5 10-5"/><path d="M2 16l10 5 10-5"/>
-    </svg>
-  </button>
-</div>
-
 <div id="zone">
   <div id="map"></div>
-  <div id="barre"><select id="choix"></select></div>
+
+  <div id="outils">
+    <div id="barre"><select id="choix"></select></div>
+    <button id="btn-couches" aria-label="Couches">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#137a1e" stroke-width="2" stroke-linejoin="round">
+        <path d="M12 3 2 8l10 5 10-5-10-5z"/><path d="M2 12l10 5 10-5"/><path d="M2 16l10 5 10-5"/>
+      </svg>
+    </button>
+  </div>
+
   <div id="panneau">
     <h4>Fond de carte</h4><div id="liste-fonds"></div>
     <h4>Éléments sur la carte</h4><div id="liste-couches"></div>
     <div class="credits">Fonds : Esri, Maxar, Earthstar Geographics · © OpenStreetMap contributors · Leaflet</div>
   </div>
+
   <div id="legende">
     <div class="nom" id="lg-nom"></div>
     <div class="corps"><div id="lg-barre"></div><div id="lg-vals"></div></div>
   </div>
 </div>
 
-<a id="bas" href="https://www.appsheet.com/start/TON-ID-APP">← Retour à l'App</a>
+<a id="bas" href="https://www.appsheet.com/start/072b8903-c281-49cd-8af6-a737949a85c4">← Retour à l'App</a>
 
+
+  
 <script>
 // ================= A MODIFIER =================
 
@@ -102,13 +105,14 @@ const CARTES = [
 // Une ligne par shapefile (zip avec .shp .shx .dbf .prj à la racine).
 // Chaque ligne apparaît avec une case à cocher dans le panneau des couches.
 const VECTEURS = [
-  {nom:'Terrasses', fichier:'terrasses.zip', couleur:'#ffff00', epaisseur:2},
-  {nom:'Arbres',    fichier:'arbres.zip',    couleur:'#ff00ff', rayon:1}
+  {nom:'Terrasses', fichier:'Terrasses.zip', couleur:'#ffff00', epaisseur:2},
+  {nom:'Arbres',    fichier:'arbres.zip',    couleur:'#ff00ff', rayon:2}
 ];
 
 // ==============================================
 
-const map = L.map('map', {maxZoom:23, attributionControl:false}).fitBounds(bounds);
+const map = L.map('map', {maxZoom:23, attributionControl:false, zoomControl:false}).fitBounds(bounds);
+L.control.zoom({position:'bottomright'}).addTo(map);
 
 map.createPane('raster');
 map.getPane('raster').style.zIndex = 250;
@@ -118,7 +122,7 @@ const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Wo
   {maxZoom:23, maxNativeZoom:19});
 sat.addTo(map);
 
-// ---- Panneau des couches (bouton dans la bande verte) ----
+// ---- Panneau des couches ----
 const panneau = document.getElementById('panneau');
 document.getElementById('btn-couches').addEventListener('click', e => {
   e.stopPropagation();
