@@ -18,9 +18,8 @@ html,body,#map{height:100%;margin:0}
   background:rgba(255,255,255,.9);padding:8px 10px;border-radius:6px;font:12px sans-serif}
 #legende .nom{font-weight:bold;margin-bottom:6px}
 #legende .corps{display:flex;gap:8px;align-items:stretch}
-#legende .barre{width:18px;height:140px;border:1px solid #888;
-  background:linear-gradient(to top,#2b83ba,#abdda4,#ffffbf,#fdae61,#d7191c)}
-#legende .valeurs{display:flex;flex-direction:column;justify-content:space-between}
+#lg-barre{width:18px;height:160px;border:1px solid #888}
+#lg-vals{display:flex;flex-direction:column;justify-content:space-between}
 </style>
 </head><body>
 <div id="map"></div>
@@ -29,8 +28,8 @@ html,body,#map{height:100%;margin:0}
 <div id="legende">
   <div class="nom" id="lg-nom"></div>
   <div class="corps">
-    <div class="barre"></div>
-    <div class="valeurs"><span id="lg-max"></span><span id="lg-mid"></span><span id="lg-min"></span></div>
+    <div id="lg-barre"></div>
+    <div id="lg-vals"></div>
   </div>
 </div>
 
@@ -38,11 +37,22 @@ html,body,#map{height:100%;margin:0}
 // ================= A MODIFIER =================
 
 // Emprise par défaut des cartes : [[sud, ouest], [nord, est]]
-const bounds = [[44.419785254707, 4.0808475794913], [44.4208034135, 4.0826552309544]];
+const bounds = [[44.41965873, 4.080807813], [44.42084133, 4.082727103]];
+
+// Palette utilisée quand une carte n'a pas son propre "degrade"
+const DEGRADE_DEFAUT = 'linear-gradient(to top,#2b83ba,#abdda4,#ffffbf,#fdae61,#d7191c)';
+
+// Palette de la carte de pH (4 = rouge ... 9 = violet), du bas vers le haut
+const DEGRADE_PH = 'linear-gradient(to top,'
+  + '#ff2a1a 0%,#ff8a1a 10%,#f5e02a 20%,#d0f02a 28%,#a0dc28 32%,#5cb82e 40%,'
+  + '#009a30 48%,#00a868 52%,#00c8a0 56%,#00f5ee 60%,#1ac0ff 68%,#2a8cff 80%,'
+  + '#3c5cff 88%,#5018ff 100%)';
 
 // Une ligne par carte raster (PNG transparent).
-// "bounds" est facultatif : à ajouter seulement si l'emprise de cette carte est différente.
+// pas = écart entre graduations (facultatif), degrade = couleurs (facultatif),
+// bounds = emprise propre à la carte (facultatif).
 const CARTES = [
+  {nom:'pH',        fichier:'ph.png',        unite:'pH',                min:4, max:9, pas:1, degrade:DEGRADE_PH},
   {nom:'Calcium',   fichier:'calcium.png',   unite:'Calcium (mg/kg)',   min:0, max:100},
   {nom:'Potassium', fichier:'potassium.png', unite:'Potassium (mg/kg)', min:0, max:100},
   {nom:'Magnésium', fichier:'magnesium.png', unite:'Magnésium (mg/kg)', min:0, max:100}
@@ -51,7 +61,7 @@ const CARTES = [
 // Une ligne par shapefile (zip avec .shp .shx .dbf .prj à la racine).
 // Supprime les lignes dont tu n'as pas encore les fichiers.
 const VECTEURS = [
-  {nom:'Terrasses', fichier:'Terrasses.zip', couleur:'#ffff00', epaisseur:2},
+  {nom:'Terrasses', fichier:'terrasses.zip', couleur:'#ffff00', epaisseur:2},
   {nom:'Arbres',    fichier:'arbres.zip',    couleur:'#ff00ff', rayon:4}
 ];
 
@@ -59,11 +69,9 @@ const VECTEURS = [
 
 const map = L.map('map', {maxZoom: 23}).fitBounds(bounds);
 
-// Panneau pour les cartes raster, sous les vecteurs
 map.createPane('raster');
 map.getPane('raster').style.zIndex = 250;
 
-// Fonds de carte
 const plan = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
   {maxZoom:23, maxNativeZoom:19, attribution:'© OpenStreetMap'});
 const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -73,7 +81,6 @@ sat.addTo(map);
 const controle = L.control.layers({'Satellite':sat, 'Plan':plan}, null,
   {position:'topright', collapsed:true}).addTo(map);
 
-// Menu déroulant des cartes
 const select = document.getElementById('choix');
 CARTES.forEach((c, i) => select.add(new Option(c.nom, i)));
 
@@ -82,15 +89,18 @@ function afficher(i){
   const c = CARTES[i];
   if(overlay) map.removeLayer(overlay);
   overlay = L.imageOverlay(c.fichier, c.bounds || bounds, {opacity:0.8, pane:'raster'}).addTo(map);
+
   document.getElementById('lg-nom').textContent = c.unite;
-  document.getElementById('lg-max').textContent = c.max;
-  document.getElementById('lg-mid').textContent = (c.min + c.max) / 2;
-  document.getElementById('lg-min').textContent = c.min;
+  document.getElementById('lg-barre').style.background = c.degrade || DEGRADE_DEFAUT;
+
+  const pas = c.pas || (c.max - c.min) / 2;
+  const vals = [];
+  for(let v = c.max; v >= c.min - 1e-9; v -= pas) vals.push(+v.toFixed(2));
+  document.getElementById('lg-vals').innerHTML = vals.map(v => '<span>' + v + '</span>').join('');
 }
 select.addEventListener('change', () => afficher(select.value));
 afficher(0);
 
-// Vecteurs (shapefiles)
 VECTEURS.forEach(v => {
   shp(v.fichier).then(geojson => {
     const couche = L.geoJSON(geojson, {
@@ -107,7 +117,6 @@ VECTEURS.forEach(v => {
   }).catch(err => console.error('Vecteur ' + v.fichier + ' : ' + err));
 });
 
-// Position GPS
 map.locate({watch:true, enableHighAccuracy:true});
 let marker;
 map.on('locationfound', e => {
