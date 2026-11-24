@@ -1,13 +1,19 @@
 <!DOCTYPE html>
 <html><head>
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/shpjs@4.0.4/dist/shp.min.js"></script>
 <style>
 html,body,#map{height:100%;margin:0}
-#titre{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:1000;
-  background:rgba(255,255,255,.9);padding:6px 14px;border-radius:6px;
-  font:bold 15px sans-serif;text-align:center;max-width:70%}
+#barre{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:1000;
+  background:rgba(255,255,255,.95);padding:6px 10px;border-radius:6px;
+  box-shadow:0 1px 4px rgba(0,0,0,.4);font:14px sans-serif}
+#choix{font:bold 15px sans-serif;padding:4px;border:0;background:transparent;max-width:55vw}
+#retour{position:absolute;top:60px;left:10px;z-index:1000;background:#fff;border-radius:6px;
+  padding:8px 12px;font:bold 14px sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.4);
+  text-decoration:none;color:#000}
 #legende{position:absolute;bottom:30px;left:10px;z-index:1000;
   background:rgba(255,255,255,.9);padding:8px 10px;border-radius:6px;font:12px sans-serif}
 #legende .nom{font-weight:bold;margin-bottom:6px}
@@ -18,7 +24,8 @@ html,body,#map{height:100%;margin:0}
 </style>
 </head><body>
 <div id="map"></div>
-<div id="titre"></div>
+<div id="barre"><select id="choix"></select></div>
+<a id="retour" href="https://www.appsheet.com/start/TON-ID-APP">← Retour à l'app</a>
 <div id="legende">
   <div class="nom" id="lg-nom"></div>
   <div class="corps">
@@ -26,37 +33,86 @@ html,body,#map{height:100%;margin:0}
     <div class="valeurs"><span id="lg-max"></span><span id="lg-mid"></span><span id="lg-min"></span></div>
   </div>
 </div>
-<script>
-// ===== A MODIFIER =====
-const TITRE   = 'Plantation – Ca';
-const LEGENDE = 'NOM (unité)';
-const VMIN = 0;     // valeur de la couleur bleue
-const VMAX = 100;   // valeur de la couleur rouge
-const bounds = [[44.419785254707, 4.0808475794913], [44.4208034135, 4.0826552309544]];
-// ======================
 
-document.getElementById('titre').textContent = TITRE;
-document.getElementById('lg-nom').textContent = LEGENDE;
-document.getElementById('lg-max').textContent = VMAX;
-document.getElementById('lg-mid').textContent = (VMIN + VMAX) / 2;
-document.getElementById('lg-min').textContent = VMIN;
+<script>
+// ================= A MODIFIER =================
+
+// Emprise par défaut des cartes : [[sud, ouest], [nord, est]]
+const bounds = [[44.419785254707, 4.0808475794913], [44.4208034135, 4.0826552309544]];
+
+// Une ligne par carte raster (PNG transparent).
+// "bounds" est facultatif : à ajouter seulement si l'emprise de cette carte est différente.
+const CARTES = [
+  {nom:'Calcium',   fichier:'calcium.png',   unite:'Calcium (mg/kg)',   min:0, max:100},
+  {nom:'Potassium', fichier:'potassium.png', unite:'Potassium (mg/kg)', min:0, max:100},
+  {nom:'Magnésium', fichier:'magnesium.png', unite:'Magnésium (mg/kg)', min:0, max:100}
+];
+
+// Une ligne par shapefile (zip avec .shp .shx .dbf .prj à la racine).
+// Supprime les lignes dont tu n'as pas encore les fichiers.
+const VECTEURS = [
+  {nom:'Terrasses', fichier:'terrasses.zip', couleur:'#ffff00', epaisseur:2},
+  {nom:'Arbres',    fichier:'arbres.zip',    couleur:'#ff00ff', rayon:4}
+];
+
+// ==============================================
 
 const map = L.map('map', {maxZoom: 23}).fitBounds(bounds);
 
+// Panneau pour les cartes raster, sous les vecteurs
+map.createPane('raster');
+map.getPane('raster').style.zIndex = 250;
+
+// Fonds de carte
 const plan = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
   {maxZoom:23, maxNativeZoom:19, attribution:'© OpenStreetMap'});
 const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
   {maxZoom:23, maxNativeZoom:19, attribution:'Esri, Maxar, Earthstar Geographics'});
 sat.addTo(map);
 
-const grille = L.imageOverlay('plantation_ca.png', bounds).addTo(map);
-L.control.layers({'Satellite':sat, 'Plan':plan}, {'Ma carte':grille}).addTo(map);
+const controle = L.control.layers({'Satellite':sat, 'Plan':plan}, null,
+  {position:'topright', collapsed:true}).addTo(map);
 
+// Menu déroulant des cartes
+const select = document.getElementById('choix');
+CARTES.forEach((c, i) => select.add(new Option(c.nom, i)));
+
+let overlay = null;
+function afficher(i){
+  const c = CARTES[i];
+  if(overlay) map.removeLayer(overlay);
+  overlay = L.imageOverlay(c.fichier, c.bounds || bounds, {opacity:0.8, pane:'raster'}).addTo(map);
+  document.getElementById('lg-nom').textContent = c.unite;
+  document.getElementById('lg-max').textContent = c.max;
+  document.getElementById('lg-mid').textContent = (c.min + c.max) / 2;
+  document.getElementById('lg-min').textContent = c.min;
+}
+select.addEventListener('change', () => afficher(select.value));
+afficher(0);
+
+// Vecteurs (shapefiles)
+VECTEURS.forEach(v => {
+  shp(v.fichier).then(geojson => {
+    const couche = L.geoJSON(geojson, {
+      style: {color: v.couleur, weight: v.epaisseur || 2, fillOpacity: 0.1},
+      pointToLayer: (f, latlng) => L.circleMarker(latlng,
+        {radius: v.rayon || 5, color: '#fff', weight: 1, fillColor: v.couleur, fillOpacity: 1}),
+      onEachFeature: (f, layer) => {
+        const p = f.properties || {};
+        const texte = Object.keys(p).map(k => '<b>' + k + '</b> : ' + p[k]).join('<br>');
+        if(texte) layer.bindPopup(texte);
+      }
+    }).addTo(map);
+    controle.addOverlay(couche, v.nom);
+  }).catch(err => console.error('Vecteur ' + v.fichier + ' : ' + err));
+});
+
+// Position GPS
 map.locate({watch:true, enableHighAccuracy:true});
 let marker;
 map.on('locationfound', e => {
   if(!marker) marker = L.circleMarker(e.latlng,{radius:8,color:'#fff',fillColor:'#1a73e8',fillOpacity:1}).addTo(map);
   else marker.setLatLng(e.latlng);
 });
-</script></body></html>
-
+</script>
+</body></html>
