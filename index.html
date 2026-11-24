@@ -49,7 +49,7 @@ const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Wo
   {maxZoom:23, maxNativeZoom:19, attribution:'Esri, Maxar, Earthstar Geographics'});
 sat.addTo(map);
 
-const grille = L.imageOverlay('plantation.png', bounds).addTo(map);
+const grille = L.imageOverlay('plantation_ca.png', bounds).addTo(map);
 L.control.layers({'Satellite':sat, 'Plan':plan}, {'Ma carte':grille}).addTo(map);
 
 map.locate({watch:true, enableHighAccuracy:true});
