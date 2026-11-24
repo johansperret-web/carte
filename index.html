@@ -88,7 +88,7 @@ let overlay = null;
 function afficher(i){
   const c = CARTES[i];
   if(overlay) map.removeLayer(overlay);
-  overlay = L.imageOverlay(c.fichier, c.bounds || bounds, {opacity:0.8, pane:'raster'}).addTo(map);
+  overlay = L.imageOverlay(c.fichier, c.bounds || bounds, {opacity:1, pane:'raster'}).addTo(map);
 
   document.getElementById('lg-nom').textContent = c.unite;
   document.getElementById('lg-barre').style.background = c.degrade || DEGRADE_DEFAUT;
