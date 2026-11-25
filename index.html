@@ -25,6 +25,9 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh}
 #zone{position:relative;flex:1 1 auto;min-height:0}
 #map{position:absolute;inset:0;z-index:0}
 
+/* Rendu noir et blanc pour le fond photo historique */
+.fond-nb img{filter:grayscale(100%) contrast(1.08)}
+
 /* Menu des cartes : centré en haut */
 #barre{position:absolute;top:calc(env(safe-area-inset-top,0px) + 10px);left:50%;
   transform:translateX(-50%);z-index:1000;height:40px;box-sizing:border-box;
@@ -63,9 +66,23 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh}
   background:rgba(255,255,255,.9);padding:8px 10px;border-radius:6px;font-size:12px}
 #legende .nom{font-weight:bold;margin-bottom:6px}
 #legende .corps{display:flex;gap:8px;align-items:stretch}
-#legende .corps.masquee{display:none}
 #lg-barre{width:18px;height:160px;border:1px solid #888}
 #lg-vals{display:flex;flex-direction:column;justify-content:space-between}
+
+/* Étiquettes des arbres au fort zoom */
+.leaflet-tooltip.etiquette-arbre{
+  background:rgba(255,255,255,.92);
+  border:1px solid rgba(0,0,0,.25);
+  border-radius:4px;
+  color:#111;
+  font-size:11px;
+  font-weight:bold;
+  padding:1px 5px;
+  box-shadow:0 1px 3px rgba(0,0,0,.25);
+  white-space:nowrap;
+  pointer-events:none
+}
+.leaflet-tooltip.etiquette-arbre::before{display:none}
 </style>
 </head><body>
 
@@ -94,7 +111,7 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh}
 
   <div id="legende">
     <div class="nom" id="lg-nom"></div>
-    <div class="corps" id="lg-corps"><div id="lg-barre"></div><div id="lg-vals"></div></div>
+    <div class="corps"><div id="lg-barre"></div><div id="lg-vals"></div></div>
   </div>
 </div>
 
@@ -106,6 +123,14 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh}
 // Emprise par défaut des cartes : [[sud, ouest], [nord, est]]
 const bounds = [[44.41965873, 4.080807813], [44.42084133, 4.082727103]];
 
+// Photo aérienne historique (1982) utilisée comme fond de carte en noir et blanc
+const FICHIER_PHOTO_1982 = 'pva_1982.png';
+const BOUNDS_PHOTO_1982  = bounds; // À ajuster si l'image calée couvre une emprise différente
+
+// Affichage des étiquettes des arbres (champ 'Identifi' du fichier arbres.dbf)
+const ZOOM_MIN_ETIQUETTES = 20;
+const CHAMP_NOM_ARBRE     = 'Identifi';
+
 // Palette utilisée quand une carte n'a pas son propre "degrade"
 const DEGRADE_DEFAUT = 'linear-gradient(to top,#2b83ba,#abdda4,#ffffbf,#fdae61,#d7191c)';
 
@@ -115,19 +140,12 @@ const DEGRADE_PH = 'linear-gradient(to top,'
   + '#009a30 48%,#00a868 52%,#00c8a0 56%,#00f5ee 60%,#1ac0ff 68%,#2a8cff 80%,'
   + '#3c5cff 88%,#5018ff 100%)';
 
-// Une ligne par carte raster (PNG transparent) ou photo aérienne calée.
+// Une ligne par carte raster (PNG transparent).
 const CARTES = [
   {nom:'pH',        fichier:'ph.png',        unite:'pH',                min:4, max:9, pas:1, degrade:DEGRADE_PH},
   {nom:'Calcium',   fichier:'calcium.png',   unite:'Calcium (mg/kg)',   min:0, max:100},
   {nom:'Potassium', fichier:'potassium.png', unite:'Potassium (mg/kg)', min:0, max:100},
-  {nom:'Magnésium', fichier:'magnesium.png', unite:'Magnésium (mg/kg)', min:0, max:100},
-  {
-    nom: 'Photo 09/02/1982',
-    fichier: 'pva_1982.png',
-    unite: 'PVA IGN — 09/02/1982 (FR3416 #0035)'
-    // Optionnel si l'emprise de la photo diffère de `bounds` :
-    // bounds: [[44.415, 4.075], [44.425, 4.090]]
-  }
+  {nom:'Magnésium', fichier:'magnesium.png', unite:'Magnésium (mg/kg)', min:0, max:100}
 ];
 
 // Une ligne par shapefile (zip avec .shp .shx .dbf .prj à la racine).
@@ -146,7 +164,9 @@ const PAS_OPACITE = 0.1;
 // Pas de boutons de zoom : on zoome avec deux doigts (ou la molette sur ordinateur)
 const map = L.map('map', {maxZoom:23, attributionControl:false, zoomControl:false}).fitBounds(bounds);
 
-// Niveaux d'affichage : cartes de sol (250) < cadastre (300) < vecteurs (400)
+// Niveaux d'affichage : fond 1982 (200) < cartes de sol (250) < cadastre (300) < vecteurs (400)
+map.createPane('fond1982');
+map.getPane('fond1982').style.zIndex = 200;
 map.createPane('raster');
 map.getPane('raster').style.zIndex = 250;
 map.createPane('cadastre');
@@ -158,6 +178,12 @@ const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Wo
   {maxZoom:23, maxNativeZoom:19});
 const ign = L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
   {maxZoom:23, maxNativeZoom:19});
+const photo1982 = L.imageOverlay(FICHIER_PHOTO_1982, BOUNDS_PHOTO_1982, {
+  opacity: 1,
+  pane: 'fond1982',
+  className: 'fond-nb'
+});
+
 sat.addTo(map);
 
 // ---- Panneau des couches ----
@@ -180,9 +206,10 @@ function ligne(type, name, texte, coche, onchange){
 
 // Le premier de la liste est celui affiché au départ (il doit correspondre au addTo ci-dessus)
 const FONDS = [
-  {nom:'Satellite Esri', couche:sat},
-  {nom:'Satellite IGN',  couche:ign},
-  {nom:'Plan',           couche:plan}
+  {nom:'Satellite Esri',   couche:sat},
+  {nom:'Satellite IGN',    couche:ign},
+  {nom:'Photo 1982 (N&B)', couche:photo1982},
+  {nom:'Plan',             couche:plan}
 ];
 FONDS.forEach((f, idx) => {
   document.getElementById('liste-fonds').appendChild(
@@ -190,7 +217,7 @@ FONDS.forEach((f, idx) => {
       if(!c) return;
       FONDS.forEach(x => map.removeLayer(x.couche));
       f.couche.addTo(map);
-      f.couche.bringToBack();
+      if(f.couche !== photo1982 && f.couche.bringToBack) f.couche.bringToBack();
     })
   );
 });
@@ -205,19 +232,13 @@ function afficher(i){
   if(overlay) map.removeLayer(overlay);
   overlay = L.imageOverlay(c.fichier, c.bounds || bounds, {opacity:opacite, pane:'raster'}).addTo(map);
 
-  document.getElementById('lg-nom').textContent = c.unite || c.nom;
-  const corps = document.getElementById('lg-corps');
-  if(typeof c.min === 'number' && typeof c.max === 'number'){
-    corps.classList.remove('masquee');
-    document.getElementById('lg-barre').style.background = c.degrade || DEGRADE_DEFAUT;
+  document.getElementById('lg-nom').textContent = c.unite;
+  document.getElementById('lg-barre').style.background = c.degrade || DEGRADE_DEFAUT;
 
-    const pas = c.pas || (c.max - c.min) / 2;
-    const vals = [];
-    for(let v = c.max; v >= c.min - 1e-9; v -= pas) vals.push(+v.toFixed(2));
-    document.getElementById('lg-vals').innerHTML = vals.map(v => '<span>' + v + '</span>').join('');
-  } else {
-    corps.classList.add('masquee');
-  }
+  const pas = c.pas || (c.max - c.min) / 2;
+  const vals = [];
+  for(let v = c.max; v >= c.min - 1e-9; v -= pas) vals.push(+v.toFixed(2));
+  document.getElementById('lg-vals').innerHTML = vals.map(v => '<span>' + v + '</span>').join('');
 }
 select.addEventListener('change', () => afficher(select.value));
 afficher(0);
@@ -237,13 +258,51 @@ document.getElementById('op-moins').addEventListener('click', () => {
 });
 majOpacite();
 
+// ---- Étiquettes des arbres (zoom >= ZOOM_MIN_ETIQUETTES) ----
+const etiquettesArbres = L.layerGroup();
+let coucheArbresRef = null;
+let arbresVisibles = true;
+
+function getNomArbre(props){
+  if(!props) return '';
+  if(CHAMP_NOM_ARBRE && props[CHAMP_NOM_ARBRE] != null){
+    return String(props[CHAMP_NOM_ARBRE]).trim();
+  }
+  const candidats = ['identifi', 'nom', 'name', 'espece', 'type', 'libelle', 'label', 'id'];
+  for(const cle of candidats){
+    const trouve = Object.keys(props).find(k => k.toLowerCase() === cle);
+    if(trouve && props[trouve] != null && String(props[trouve]).trim() !== ''){
+      return String(props[trouve]).trim();
+    }
+  }
+  const premiereValeur = Object.values(props).find(v => v != null && String(v).trim() !== '');
+  return premiereValeur ? String(premiereValeur).trim() : '';
+}
+
+function majEtiquettesArbres(){
+  const zoomOk = map.getZoom() >= ZOOM_MIN_ETIQUETTES;
+  const afficherEtiquettes = zoomOk && arbresVisibles && coucheArbresRef && map.hasLayer(coucheArbresRef);
+  if(afficherEtiquettes){
+    if(!map.hasLayer(etiquettesArbres)) map.addLayer(etiquettesArbres);
+  } else if(map.hasLayer(etiquettesArbres)){
+    map.removeLayer(etiquettesArbres);
+  }
+}
+map.on('zoomend', majEtiquettesArbres);
+
 // ---- Vecteurs (shapefiles) ----
 VECTEURS.forEach(v => {
   v.couche = null;
   v.visible = true;
+  const estArbres = v.fichier.toLowerCase().includes('arbre');
+
   const l = ligne('checkbox', null, v.nom, true, on => {
     v.visible = on;
     if(v.couche) on ? map.addLayer(v.couche) : map.removeLayer(v.couche);
+    if(estArbres){
+      arbresVisibles = on;
+      majEtiquettesArbres();
+    }
   });
   document.getElementById('liste-couches').appendChild(l);
 
@@ -252,22 +311,43 @@ VECTEURS.forEach(v => {
     .then(buf => shp(buf))
     .then(geojson => {
       const rayon = v.rayon || 5;
+      if(estArbres) etiquettesArbres.clearLayers();
+
       v.couche = L.geoJSON(geojson, {
         style: {color: v.couleur, weight: v.epaisseur || 2, fillOpacity: 0.1},
-        pointToLayer: (f, latlng) => L.circleMarker(latlng, {
-          radius: rayon,
-          color: '#fff',
-          weight: rayon <= 2 ? 0 : 1,
-          fillColor: v.couleur,
-          fillOpacity: 1
-        }),
+        pointToLayer: (f, latlng) => {
+          const markerPoint = L.circleMarker(latlng, {
+            radius: rayon,
+            color: '#fff',
+            weight: rayon <= 2 ? 0 : 1,
+            fillColor: v.couleur,
+            fillOpacity: 1
+          });
+          if(estArbres){
+            const nom = getNomArbre(f.properties);
+            if(nom){
+              etiquettesArbres.addLayer(
+                L.tooltip({
+                  permanent: true,
+                  direction: 'top',
+                  offset: [0, -4],
+                  className: 'etiquette-arbre'
+                }).setContent(nom).setLatLng(latlng)
+              );
+            }
+          }
+          return markerPoint;
+        },
         onEachFeature: (f, layer) => {
           const p = f.properties || {};
           const texte = Object.keys(p).map(k => '<b>' + k + '</b> : ' + p[k]).join('<br>');
           if(texte) layer.bindPopup(texte);
         }
       });
+
+      if(estArbres) coucheArbresRef = v.couche;
       if(v.visible) v.couche.addTo(map);
+      if(estArbres) majEtiquettesArbres();
     })
     .catch(err => {
       console.error('Vecteur ' + v.fichier + ' : ' + err);
