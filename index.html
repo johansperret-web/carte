@@ -63,6 +63,7 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh}
   background:rgba(255,255,255,.9);padding:8px 10px;border-radius:6px;font-size:12px}
 #legende .nom{font-weight:bold;margin-bottom:6px}
 #legende .corps{display:flex;gap:8px;align-items:stretch}
+#legende .corps.masquee{display:none}
 #lg-barre{width:18px;height:160px;border:1px solid #888}
 #lg-vals{display:flex;flex-direction:column;justify-content:space-between}
 </style>
@@ -93,7 +94,7 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh}
 
   <div id="legende">
     <div class="nom" id="lg-nom"></div>
-    <div class="corps"><div id="lg-barre"></div><div id="lg-vals"></div></div>
+    <div class="corps" id="lg-corps"><div id="lg-barre"></div><div id="lg-vals"></div></div>
   </div>
 </div>
 
@@ -114,12 +115,19 @@ const DEGRADE_PH = 'linear-gradient(to top,'
   + '#009a30 48%,#00a868 52%,#00c8a0 56%,#00f5ee 60%,#1ac0ff 68%,#2a8cff 80%,'
   + '#3c5cff 88%,#5018ff 100%)';
 
-// Une ligne par carte raster (PNG transparent).
+// Une ligne par carte raster (PNG transparent) ou photo aérienne calée.
 const CARTES = [
   {nom:'pH',        fichier:'ph.png',        unite:'pH',                min:4, max:9, pas:1, degrade:DEGRADE_PH},
   {nom:'Calcium',   fichier:'calcium.png',   unite:'Calcium (mg/kg)',   min:0, max:100},
   {nom:'Potassium', fichier:'potassium.png', unite:'Potassium (mg/kg)', min:0, max:100},
-  {nom:'Magnésium', fichier:'magnesium.png', unite:'Magnésium (mg/kg)', min:0, max:100}
+  {nom:'Magnésium', fichier:'magnesium.png', unite:'Magnésium (mg/kg)', min:0, max:100},
+  {
+    nom: 'Photo 09/02/1982',
+    fichier: 'pva_1982.png',
+    unite: 'PVA IGN — 09/02/1982 (FR3416 #0035)'
+    // Optionnel si l'emprise de la photo diffère de `bounds` :
+    // bounds: [[44.415, 4.075], [44.425, 4.090]]
+  }
 ];
 
 // Une ligne par shapefile (zip avec .shp .shx .dbf .prj à la racine).
@@ -197,13 +205,19 @@ function afficher(i){
   if(overlay) map.removeLayer(overlay);
   overlay = L.imageOverlay(c.fichier, c.bounds || bounds, {opacity:opacite, pane:'raster'}).addTo(map);
 
-  document.getElementById('lg-nom').textContent = c.unite;
-  document.getElementById('lg-barre').style.background = c.degrade || DEGRADE_DEFAUT;
+  document.getElementById('lg-nom').textContent = c.unite || c.nom;
+  const corps = document.getElementById('lg-corps');
+  if(typeof c.min === 'number' && typeof c.max === 'number'){
+    corps.classList.remove('masquee');
+    document.getElementById('lg-barre').style.background = c.degrade || DEGRADE_DEFAUT;
 
-  const pas = c.pas || (c.max - c.min) / 2;
-  const vals = [];
-  for(let v = c.max; v >= c.min - 1e-9; v -= pas) vals.push(+v.toFixed(2));
-  document.getElementById('lg-vals').innerHTML = vals.map(v => '<span>' + v + '</span>').join('');
+    const pas = c.pas || (c.max - c.min) / 2;
+    const vals = [];
+    for(let v = c.max; v >= c.min - 1e-9; v -= pas) vals.push(+v.toFixed(2));
+    document.getElementById('lg-vals').innerHTML = vals.map(v => '<span>' + v + '</span>').join('');
+  } else {
+    corps.classList.add('masquee');
+  }
 }
 select.addEventListener('change', () => afficher(select.value));
 afficher(0);
@@ -243,7 +257,7 @@ VECTEURS.forEach(v => {
         pointToLayer: (f, latlng) => L.circleMarker(latlng, {
           radius: rayon,
           color: '#fff',
-          weight: rayon <= 2 ? 0 : 1,   // pas de contour blanc pour les très petits points
+          weight: rayon <= 2 ? 0 : 1,
           fillColor: v.couleur,
           fillOpacity: 1
         }),
