@@ -139,11 +139,19 @@ const DEGRADE_PH = 'linear-gradient(to top,'
   + '#ff2a1a 0%,#ff8a1a 10%,#f5e02a 20%,#d0f02a 28%,#a0dc28 32%,#5cb82e 40%,'
   + '#009a30 48%,#00a868 52%,#00c8a0 56%,#00f5ee 60%,#1ac0ff 68%,#2a8cff 80%,'
   + '#3c5cff 88%,#5018ff 100%)';
+const DEGRADE_CALCIUM = 'linear-gradient(to top,'
+  + '#ff2b18 0%,#fa751e 5%,#f6bf25 10%,#eefc2a 15%,#d5f22b 20%,'
+  + '#bce72c 25%,#a2dd2d 30%,#89d22e 35%,#70c82f 40%,#57bd30 45%,'
+  + '#3db331 50%,#24a832 55%,#0b9d33 60%,#01a44a 65%,#02b771 70%,'
+  + '#04cb98 75%,#06debf 80%,#07f1e6 85%,#16d3fd 90%,#3773fc 95%,'
+  + '#5813fc 100%)';
 
+
+  
 // Une ligne par carte raster (PNG transparent).
 const CARTES = [
   {nom:'pH',        fichier:'ph.png',        unite:'pH',                min:4, max:9, pas:1, degrade:DEGRADE_PH},
-  {nom:'Calcium',   fichier:'calcium.png',   unite:'Calcium (mg/kg)',   min:0, max:100},
+  {nom:'Calcium',   fichier:'calcium.png',   unite:'Calcium (cmol+/kg)',   min:0, max:20, pas:5, degrade:DEGRADE_CALCIUM},
   {nom:'Potassium', fichier:'potassium.png', unite:'Potassium (mg/kg)', min:0, max:100},
   {nom:'Magnésium', fichier:'magnesium.png', unite:'Magnésium (mg/kg)', min:0, max:100}
 ];
