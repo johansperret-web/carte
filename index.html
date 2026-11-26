@@ -181,4 +181,225 @@ sat.addTo(map);
 // Photographies aériennes historiques IGN (tuiles WMTS)
 function orthoIGN(couche){
   return L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=' + couche +
-    '&STYLE=normal&FORMAT=image/jpeg&TILE
+    '&STYLE=normal&FORMAT=image/jpeg&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+    {maxZoom:23, maxNativeZoom:18});
+}
+
+// ---- Panneau des couches ----
+const panneau = document.getElementById('panneau');
+document.getElementById('btn-couches').addEventListener('click', e => {
+  e.stopPropagation();
+  panneau.classList.toggle('ouvert');
+});
+map.on('click', () => panneau.classList.remove('ouvert'));
+
+function ligne(type, name, texte, coche, onchange){
+  const l = document.createElement('label');
+  const i = document.createElement('input');
+  i.type = type; if(name) i.name = name; i.checked = coche;
+  i.addEventListener('change', () => onchange(i.checked));
+  l.append(i, ' ' + texte);
+  l.input = i;
+  return l;
+}
+
+// Le premier de la liste est celui affiché au départ (il doit correspondre au addTo ci-dessus)
+const FONDS = [
+  {nom:'Satellite Esri',                 couche:sat},
+  {nom:'Satellite IGN (actuel)',         couche:ign},
+  {nom:'IGN 1950-1965 (noir et blanc)',  couche:orthoIGN('ORTHOIMAGERY.ORTHOPHOTOS.1950-1965')},
+  {nom:'IGN 2000-2005',                  couche:orthoIGN('ORTHOIMAGERY.ORTHOPHOTOS2000-2005')},
+  {nom:'IGN 2006-2010',                  couche:orthoIGN('ORTHOIMAGERY.ORTHOPHOTOS2006-2010')},
+  {nom:'IGN 2011-2015',                  couche:orthoIGN('ORTHOIMAGERY.ORTHOPHOTOS2011-2015')},
+  {nom:'IGN 2016-2020',                  couche:orthoIGN('ORTHOIMAGERY.ORTHOPHOTOS2016-2020')},
+  {nom:'Plan',                           couche:plan}
+];
+
+FONDS.forEach((f, idx) => {
+  document.getElementById('liste-fonds').appendChild(
+    ligne('radio', 'fond', f.nom, idx === 0, c => {
+      if(!c) return;
+      FONDS.forEach(x => map.removeLayer(x.couche));
+      f.couche.addTo(map);
+      f.couche.bringToBack();
+    })
+  );
+});
+
+// ---- Menu déroulant des cartes ----
+const select = document.getElementById('choix');
+CARTES.forEach((c, i) => select.add(new Option(c.nom, i)));
+
+let overlay = null;
+function afficher(i){
+  const c = CARTES[i];
+  if(overlay) map.removeLayer(overlay);
+  overlay = L.imageOverlay(c.fichier, c.bounds || bounds, {opacity:opacite, pane:'raster'}).addTo(map);
+
+  document.getElementById('lg-nom').textContent = c.unite;
+  document.getElementById('lg-barre').style.background = c.degrade || DEGRADE_DEFAUT;
+
+  const pas = c.pas || (c.max - c.min) / 2;
+  const vals = [];
+  for(let v = c.max; v >= c.min - 1e-9; v -= pas) vals.push(+v.toFixed(2));
+  document.getElementById('lg-vals').innerHTML = vals.map(v => '<span>' + v + '</span>').join('');
+}
+select.addEventListener('change', () => afficher(select.value));
+afficher(0);
+
+// ---- Boutons + / − : opacité de la carte ----
+function majOpacite(){
+  document.getElementById('op-val').textContent = Math.round(opacite * 100) + '%';
+  if(overlay) overlay.setOpacity(opacite);
+}
+document.getElementById('op-plus').addEventListener('click', () => {
+  opacite = Math.min(1, +(opacite + PAS_OPACITE).toFixed(2));
+  majOpacite();
+});
+document.getElementById('op-moins').addEventListener('click', () => {
+  opacite = Math.max(0.1, +(opacite - PAS_OPACITE).toFixed(2));
+  majOpacite();
+});
+majOpacite();
+
+// ---- Étiquettes des arbres (zoom >= ZOOM_MIN_ETIQUETTES) ----
+const etiquettesArbres = L.layerGroup();
+let coucheArbresRef = null;
+let arbresVisibles = true;
+
+function getNomArbre(props){
+  if(!props) return '';
+  if(CHAMP_NOM_ARBRE && props[CHAMP_NOM_ARBRE] != null){
+    return String(props[CHAMP_NOM_ARBRE]).trim();
+  }
+  const candidats = ['identifi', 'nom', 'name', 'espece', 'type', 'libelle', 'label', 'id'];
+  for(const cle of candidats){
+    const trouve = Object.keys(props).find(k => k.toLowerCase() === cle);
+    if(trouve && props[trouve] != null && String(props[trouve]).trim() !== ''){
+      return String(props[trouve]).trim();
+    }
+  }
+  const premiereValeur = Object.values(props).find(v => v != null && String(v).trim() !== '');
+  return premiereValeur ? String(premiereValeur).trim() : '';
+}
+
+function majEtiquettesArbres(){
+  const zoomOk = map.getZoom() >= ZOOM_MIN_ETIQUETTES;
+  const afficherEtiquettes = zoomOk && arbresVisibles && coucheArbresRef && map.hasLayer(coucheArbresRef);
+  if(afficherEtiquettes){
+    if(!map.hasLayer(etiquettesArbres)) map.addLayer(etiquettesArbres);
+  } else if(map.hasLayer(etiquettesArbres)){
+    map.removeLayer(etiquettesArbres);
+  }
+}
+map.on('zoomend', majEtiquettesArbres);
+
+// ---- Vecteurs (shapefiles) ----
+VECTEURS.forEach(v => {
+  v.couche = null;
+  v.visible = true;
+  const estArbres = v.fichier.toLowerCase().includes('arbre');
+
+  const l = ligne('checkbox', null, v.nom, true, on => {
+    v.visible = on;
+    if(v.couche) on ? map.addLayer(v.couche) : map.removeLayer(v.couche);
+    if(estArbres){
+      arbresVisibles = on;
+      majEtiquettesArbres();
+    }
+  });
+  document.getElementById('liste-couches').appendChild(l);
+
+  fetch(v.fichier)
+    .then(r => { if(!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
+    .then(buf => shp(buf))
+    .then(geojson => {
+      const rayon = v.rayon || 5;
+      if(estArbres) etiquettesArbres.clearLayers();
+
+      v.couche = L.geoJSON(geojson, {
+        style: {color: v.couleur, weight: v.epaisseur || 2, fillOpacity: 0.1},
+        pointToLayer: (f, latlng) => {
+          const markerPoint = L.circleMarker(latlng, {
+            radius: rayon,
+            color: '#fff',
+            weight: rayon <= 2 ? 0 : 1,
+            fillColor: v.couleur,
+            fillOpacity: 1
+          });
+          if(estArbres){
+            const nom = getNomArbre(f.properties);
+            if(nom){
+              etiquettesArbres.addLayer(
+                L.tooltip({
+                  permanent: true,
+                  direction: 'top',
+                  offset: [0, -4],
+                  className: 'etiquette-arbre'
+                }).setContent(nom).setLatLng(latlng)
+              );
+            }
+          }
+          return markerPoint;
+        },
+        onEachFeature: (f, layer) => {
+          const p = f.properties || {};
+          const texte = Object.keys(p).map(k => '<b>' + k + '</b> : ' + p[k]).join('<br>');
+          if(texte) layer.bindPopup(texte);
+        }
+      });
+
+      if(estArbres) coucheArbresRef = v.couche;
+      if(v.visible) v.couche.addTo(map);
+      if(estArbres) majEtiquettesArbres();
+    })
+    .catch(err => {
+      console.error('Vecteur ' + v.fichier + ' : ' + err);
+      l.classList.add('indispo');
+      l.input.disabled = true;
+      l.append(' (indisponible)');
+    });
+});
+
+// ---- Cadastre IGN (parcelles), case décochée au départ ----
+const cadastre = L.tileLayer.wms('https://data.geopf.fr/wms-r/wms', {
+  layers: 'CADASTRALPARCELS.PARCELLAIRE_EXPRESS',
+  format: 'image/png',
+  transparent: true,
+  version: '1.3.0',
+  detectRetina: true,
+  opacity: 0.8,
+  maxZoom: 23,
+  pane: 'cadastre'
+});
+document.getElementById('liste-couches').appendChild(
+  ligne('checkbox', null, 'Cadastre (parcelles)', false,
+    on => on ? map.addLayer(cadastre) : map.removeLayer(cadastre))
+);
+
+// ---- Décalage manuel du cadastre (en mètres) ----
+// Est positif = vers la droite, Nord positif = vers le haut.
+// Test sans modifier le fichier : ajoute ?ce=3&cn=-2 à l'adresse de la page.
+const params = new URLSearchParams(location.search);
+const DECALAGE_EST_M   = parseFloat(params.get('ce')) || 1;
+const DECALAGE_NORD_M  = parseFloat(params.get('cn')) || 10;
+
+function appliquerDecalageCadastre(){
+  const lat = map.getCenter().lat;
+  const mParPx = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, map.getZoom());
+  const dx =  DECALAGE_EST_M  / mParPx;
+  const dy = -DECALAGE_NORD_M / mParPx;
+  map.getPane('cadastre').style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+}
+map.on('zoomend moveend viewreset', appliquerDecalageCadastre);
+appliquerDecalageCadastre();
+
+// ---- Position GPS ----
+map.locate({watch:true, enableHighAccuracy:true});
+let marker;
+map.on('locationfound', e => {
+  if(!marker) marker = L.circleMarker(e.latlng,{radius:8,color:'#fff',fillColor:'#1a73e8',fillOpacity:1}).addTo(map);
+  else marker.setLatLng(e.latlng);
+});
+</script>
+</body></html>
