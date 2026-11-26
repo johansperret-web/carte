@@ -30,19 +30,21 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh}
   transform:translateX(-50%);z-index:1000;height:40px;box-sizing:border-box;
   background:rgba(255,255,255,.95);border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.4);
   padding:0 8px;display:flex;align-items:center}
-#choix{font:bold 15px sans-serif;border:0;background:transparent;color:#000;max-width:50vw;height:100%}
+#choix{font:bold 15px sans-serif;border:0;background:transparent;color:#000;max-width:50vw;height:100%;
+  outline:none;-webkit-tap-highlight-color:transparent}
+#choix:focus,#choix:focus-visible,#choix:active{outline:none;box-shadow:none;border:0}
 
 /* Bouton des couches : en haut à droite */
 #btn-couches{position:absolute;top:calc(env(safe-area-inset-top,0px) + 10px);right:10px;
   z-index:1000;width:40px;height:40px;border:0;border-radius:8px;background:#fff;
   box-shadow:0 1px 4px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;
-  cursor:pointer;padding:0}
+  cursor:pointer;padding:0;outline:none;-webkit-tap-highlight-color:transparent}
 
 /* Réglage d'opacité : en bas à droite */
 #opacite{position:absolute;bottom:12px;right:10px;z-index:1000;display:flex;flex-direction:column;
   align-items:center;background:#fff;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.4);overflow:hidden}
 #opacite button{width:40px;height:40px;border:0;background:#fff;font:bold 22px sans-serif;
-  color:#222;cursor:pointer;padding:0}
+  color:#222;cursor:pointer;padding:0;outline:none;-webkit-tap-highlight-color:transparent}
 #opacite button:active{background:#e6e6e6}
 #op-val{font:bold 11px sans-serif;color:#444;padding:2px 0;border-top:1px solid #ddd;
   border-bottom:1px solid #ddd;width:100%;text-align:center}
@@ -140,11 +142,13 @@ const DEGRADE_CALCIUM = 'linear-gradient(to top,'
   + '#5813fc 100%)';
 
 // Une ligne par carte raster (PNG transparent).
+// La dernière ligne (fichier:null) sert à ne rien afficher.
 const CARTES = [
   {nom:'pH',        fichier:'ph.png',        unite:'pH',                 min:4, max:9,  pas:1, degrade:DEGRADE_PH},
   {nom:'Calcium',   fichier:'calcium.png',   unite:'Calcium (cmol+/kg)', min:0, max:20, pas:5, degrade:DEGRADE_CALCIUM},
   {nom:'Potassium', fichier:'potassium.png', unite:'Potassium (mg/kg)',  min:0, max:100},
-  {nom:'Magnésium', fichier:'magnesium.png', unite:'Magnésium (mg/kg)',  min:0, max:100}
+  {nom:'Magnésium', fichier:'magnesium.png', unite:'Magnésium (mg/kg)',  min:0, max:100},
+  {nom:'Sans carte', fichier:null}
 ];
 
 // Une ligne par shapefile (zip avec .shp .shx .dbf .prj à la racine).
@@ -178,11 +182,22 @@ const ign = L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile
 
 sat.addTo(map);
 
-// Photographies aériennes historiques IGN (tuiles WMTS)
-function orthoIGN(couche){
-  return L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=' + couche +
-    '&STYLE=normal&FORMAT=image/jpeg&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
-    {maxZoom:23, maxNativeZoom:18});
+// Photographies aériennes historiques IGN (tuiles WMTS).
+// 'format' est le format demandé en premier ; si une tuile échoue,
+// la page réessaie automatiquement dans l'autre format (PNG <-> JPEG).
+function orthoIGN(couche, format){
+  const autre = format === 'image/png' ? 'image/jpeg' : 'image/png';
+  const url = fmt => 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=' + couche +
+    '&STYLE=normal&FORMAT=' + fmt + '&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}';
+  const lay = L.tileLayer(url(format), {maxZoom:23, maxNativeZoom:18});
+  const dejaEssaye = {};
+  lay.on('tileerror', e => {
+    const cle = e.coords.z + '/' + e.coords.x + '/' + e.coords.y;
+    if(dejaEssaye[cle]) return;
+    dejaEssaye[cle] = true;
+    e.tile.src = L.Util.template(url(autre), {x:e.coords.x, y:e.coords.y, z:e.coords.z});
+  });
+  return lay;
 }
 
 // ---- Panneau des couches ----
@@ -207,11 +222,11 @@ function ligne(type, name, texte, coche, onchange){
 const FONDS = [
   {nom:'Satellite Esri',                 couche:sat},
   {nom:'Satellite IGN (actuel)',         couche:ign},
-  {nom:'IGN 1950-1965 (noir et blanc)',  couche:orthoIGN('ORTHOIMAGERY.ORTHOPHOTOS.1950-1965')},
-  {nom:'IGN 2000-2005',                  couche:orthoIGN('ORTHOIMAGERY.ORTHOPHOTOS2000-2005')},
-  {nom:'IGN 2006-2010',                  couche:orthoIGN('ORTHOIMAGERY.ORTHOPHOTOS2006-2010')},
-  {nom:'IGN 2011-2015',                  couche:orthoIGN('ORTHOIMAGERY.ORTHOPHOTOS2011-2015')},
-  {nom:'IGN 2016-2020',                  couche:orthoIGN('ORTHOIMAGERY.ORTHOPHOTOS2016-2020')},
+  {nom:'IGN 1950-1965 (noir et blanc)',  couche:orthoIGN('ORTHOIMAGERY.ORTHOPHOTOS.1950-1965', 'image/png')},
+  {nom:'IGN 2000-2005',                  couche:orthoIGN('ORTHOIMAGERY.ORTHOPHOTOS2000-2005', 'image/jpeg')},
+  {nom:'IGN 2006-2010',                  couche:orthoIGN('ORTHOIMAGERY.ORTHOPHOTOS2006-2010', 'image/jpeg')},
+  {nom:'IGN 2011-2015',                  couche:orthoIGN('ORTHOIMAGERY.ORTHOPHOTOS2011-2015', 'image/jpeg')},
+  {nom:'IGN 2016-2020',                  couche:orthoIGN('ORTHOIMAGERY.ORTHOPHOTOS2016-2020', 'image/jpeg')},
   {nom:'Plan',                           couche:plan}
 ];
 
@@ -233,7 +248,15 @@ CARTES.forEach((c, i) => select.add(new Option(c.nom, i)));
 let overlay = null;
 function afficher(i){
   const c = CARTES[i];
-  if(overlay) map.removeLayer(overlay);
+  if(overlay){ map.removeLayer(overlay); overlay = null; }
+
+  const legende = document.getElementById('legende');
+  if(!c.fichier){            // "Sans carte" : rien à afficher
+    legende.style.display = 'none';
+    return;
+  }
+  legende.style.display = '';
+
   overlay = L.imageOverlay(c.fichier, c.bounds || bounds, {opacity:opacite, pane:'raster'}).addTo(map);
 
   document.getElementById('lg-nom').textContent = c.unite;
@@ -244,7 +267,7 @@ function afficher(i){
   for(let v = c.max; v >= c.min - 1e-9; v -= pas) vals.push(+v.toFixed(2));
   document.getElementById('lg-vals').innerHTML = vals.map(v => '<span>' + v + '</span>').join('');
 }
-select.addEventListener('change', () => afficher(select.value));
+select.addEventListener('change', () => { afficher(select.value); select.blur(); });
 afficher(0);
 
 // ---- Boutons + / − : opacité de la carte ----
