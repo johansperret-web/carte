@@ -25,6 +25,9 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh}
 #zone{position:relative;flex:1 1 auto;min-height:0}
 #map{position:absolute;inset:0;z-index:0}
 
+/* Photos aériennes anciennes : rendu noir et blanc */
+.fond-nb{filter:grayscale(100%) contrast(1.08)}
+
 /* Menu des cartes : centré en haut */
 #barre{position:absolute;top:calc(env(safe-area-inset-top,0px) + 10px);left:50%;
   transform:translateX(-50%);z-index:1000;height:40px;box-sizing:border-box;
@@ -105,7 +108,7 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh}
   <div id="panneau">
     <h4>Fond de carte</h4><div id="liste-fonds"></div>
     <h4>Éléments sur la carte</h4><div id="liste-couches"></div>
-    <div class="credits">Fonds : Esri, Maxar, Earthstar Geographics · Photographies aériennes et cadastre © IGN/Géoplateforme · © OpenStreetMap contributors · Leaflet</div>
+    <div class="credits">Fonds : Esri, Maxar, Earthstar Geographics · Photographies aériennes et cadastre © IGN/Géoplateforme · PVA 1982 © IGN · © OpenStreetMap contributors · Leaflet</div>
   </div>
 
   <div id="legende">
@@ -121,6 +124,13 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh}
 
 // Emprise par défaut des cartes : [[sud, ouest], [nord, est]]
 const bounds = [[44.41965873, 4.080807813], [44.42084133, 4.082727103]];
+
+// Photos aériennes anciennes calées (PNG) : une ligne par photo.
+// "bounds" = [[sud, ouest], [nord, est]] en degrés (fichier .pgw converti).
+const PHOTOS = [
+  {nom:'Photo 1982 (N&B)', fichier:'pva_1982.png',
+   bounds:[[44.419038599, 4.079786290], [44.421197323, 4.083360517]]}
+];
 
 // Affichage des étiquettes des arbres (champ 'Identifi' du fichier arbres.dbf)
 const ZOOM_MIN_ETIQUETTES = 21;
@@ -167,7 +177,9 @@ const PAS_OPACITE = 0.1;
 // Pas de boutons de zoom : on zoome avec deux doigts (ou la molette sur ordinateur)
 const map = L.map('map', {maxZoom:23, attributionControl:false, zoomControl:false}).fitBounds(bounds);
 
-// Niveaux d'affichage : cartes de sol (250) < cadastre (300) < vecteurs (400)
+// Niveaux d'affichage : photos anciennes (200) < cartes de sol (250) < cadastre (300) < vecteurs (400)
+map.createPane('fond1982');
+map.getPane('fond1982').style.zIndex = 200;
 map.createPane('raster');
 map.getPane('raster').style.zIndex = 250;
 map.createPane('cadastre');
@@ -223,7 +235,6 @@ const FONDS = [
   {nom:'Satellite Esri',                 couche:sat},
   {nom:'Satellite IGN (actuel)',         couche:ign},
   {nom:'IGN 1950-1965 (noir et blanc)',  couche:orthoIGN('ORTHOIMAGERY.ORTHOPHOTOS.1950-1965', 'image/png')},
-  {nom:'IGN 1980-1995', couche:orthoIGN('ORTHOIMAGERY.ORTHOPHOTOS.1980-1995', 'image/png')},
   {nom:'IGN 2000-2005',                  couche:orthoIGN('ORTHOIMAGERY.ORTHOPHOTOS2000-2005', 'image/jpeg')},
   {nom:'IGN 2006-2010',                  couche:orthoIGN('ORTHOIMAGERY.ORTHOPHOTOS2006-2010', 'image/jpeg')},
   {nom:'IGN 2011-2015',                  couche:orthoIGN('ORTHOIMAGERY.ORTHOPHOTOS2011-2015', 'image/jpeg')},
@@ -231,13 +242,19 @@ const FONDS = [
   {nom:'Plan',                           couche:plan}
 ];
 
+// Photos anciennes calées : ajoutées à la liste des fonds, juste avant "Plan"
+PHOTOS.forEach(p => {
+  const couche = L.imageOverlay(p.fichier, p.bounds, {pane:'fond1982', opacity:1, className:'fond-nb'});
+  FONDS.splice(FONDS.length - 1, 0, {nom:p.nom, couche:couche});
+});
+
 FONDS.forEach((f, idx) => {
   document.getElementById('liste-fonds').appendChild(
     ligne('radio', 'fond', f.nom, idx === 0, c => {
       if(!c) return;
       FONDS.forEach(x => map.removeLayer(x.couche));
       f.couche.addTo(map);
-      f.couche.bringToBack();
+      if(f.couche.bringToBack) f.couche.bringToBack();
     })
   );
 });
