@@ -25,9 +25,6 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh}
 #zone{position:relative;flex:1 1 auto;min-height:0}
 #map{position:absolute;inset:0;z-index:0}
 
-/* Rendu noir et blanc pour le fond photo historique */
-.fond-nb img{filter:grayscale(100%) contrast(1.08)}
-
 /* Menu des cartes : centré en haut */
 #barre{position:absolute;top:calc(env(safe-area-inset-top,0px) + 10px);left:50%;
   transform:translateX(-50%);z-index:1000;height:40px;box-sizing:border-box;
@@ -50,10 +47,10 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh}
 #op-val{font:bold 11px sans-serif;color:#444;padding:2px 0;border-top:1px solid #ddd;
   border-bottom:1px solid #ddd;width:100%;text-align:center}
 
-/* Panneau des couches */
+/* Panneau des couches (défile si la liste est longue) */
 #panneau{display:none;position:absolute;top:calc(env(safe-area-inset-top,0px) + 58px);right:10px;
   z-index:1100;background:#fff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.4);
-  padding:10px 14px;font-size:14px;max-width:75vw;color:#222}
+  padding:10px 14px;font-size:14px;max-width:75vw;max-height:70vh;overflow:auto;color:#222}
 #panneau.ouvert{display:block}
 #panneau h4{margin:10px 0 4px;font-size:13px;color:#555}
 #panneau h4:first-child{margin-top:0}
@@ -123,10 +120,6 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh}
 // Emprise par défaut des cartes : [[sud, ouest], [nord, est]]
 const bounds = [[44.41965873, 4.080807813], [44.42084133, 4.082727103]];
 
-// Photo aérienne historique (1982) utilisée comme fond de carte en noir et blanc
-const FICHIER_PHOTO_1982 = 'pva_1982.png';
-const BOUNDS_PHOTO_1982  = bounds; // À ajuster si l'image calée couvre une emprise différente
-
 // Affichage des étiquettes des arbres (champ 'Identifi' du fichier arbres.dbf)
 const ZOOM_MIN_ETIQUETTES = 21;
 const CHAMP_NOM_ARBRE     = 'Identifi';
@@ -146,14 +139,12 @@ const DEGRADE_CALCIUM = 'linear-gradient(to top,'
   + '#04cb98 75%,#06debf 80%,#07f1e6 85%,#16d3fd 90%,#3773fc 95%,'
   + '#5813fc 100%)';
 
-
-  
 // Une ligne par carte raster (PNG transparent).
 const CARTES = [
-  {nom:'pH',        fichier:'ph.png',        unite:'pH',                min:4, max:9, pas:1, degrade:DEGRADE_PH},
-  {nom:'Calcium',   fichier:'calcium.png',   unite:'Calcium (cmol+/kg)',   min:0, max:20, pas:5, degrade:DEGRADE_CALCIUM},
-  {nom:'Potassium', fichier:'potassium.png', unite:'Potassium (mg/kg)', min:0, max:100},
-  {nom:'Magnésium', fichier:'magnesium.png', unite:'Magnésium (mg/kg)', min:0, max:100}
+  {nom:'pH',        fichier:'ph.png',        unite:'pH',                 min:4, max:9,  pas:1, degrade:DEGRADE_PH},
+  {nom:'Calcium',   fichier:'calcium.png',   unite:'Calcium (cmol+/kg)', min:0, max:20, pas:5, degrade:DEGRADE_CALCIUM},
+  {nom:'Potassium', fichier:'potassium.png', unite:'Potassium (mg/kg)',  min:0, max:100},
+  {nom:'Magnésium', fichier:'magnesium.png', unite:'Magnésium (mg/kg)',  min:0, max:100}
 ];
 
 // Une ligne par shapefile (zip avec .shp .shx .dbf .prj à la racine).
@@ -172,9 +163,7 @@ const PAS_OPACITE = 0.1;
 // Pas de boutons de zoom : on zoome avec deux doigts (ou la molette sur ordinateur)
 const map = L.map('map', {maxZoom:23, attributionControl:false, zoomControl:false}).fitBounds(bounds);
 
-// Niveaux d'affichage : fond 1982 (200) < cartes de sol (250) < cadastre (300) < vecteurs (400)
-map.createPane('fond1982');
-map.getPane('fond1982').style.zIndex = 200;
+// Niveaux d'affichage : cartes de sol (250) < cadastre (300) < vecteurs (400)
 map.createPane('raster');
 map.getPane('raster').style.zIndex = 250;
 map.createPane('cadastre');
@@ -186,224 +175,10 @@ const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Wo
   {maxZoom:23, maxNativeZoom:19});
 const ign = L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
   {maxZoom:23, maxNativeZoom:19});
-const photo1982 = L.imageOverlay(FICHIER_PHOTO_1982, BOUNDS_PHOTO_1982, {
-  opacity: 1,
-  pane: 'fond1982',
-  className: 'fond-nb'
-});
 
 sat.addTo(map);
 
-// ---- Panneau des couches ----
-const panneau = document.getElementById('panneau');
-document.getElementById('btn-couches').addEventListener('click', e => {
-  e.stopPropagation();
-  panneau.classList.toggle('ouvert');
-});
-map.on('click', () => panneau.classList.remove('ouvert'));
-
-function ligne(type, name, texte, coche, onchange){
-  const l = document.createElement('label');
-  const i = document.createElement('input');
-  i.type = type; if(name) i.name = name; i.checked = coche;
-  i.addEventListener('change', () => onchange(i.checked));
-  l.append(i, ' ' + texte);
-  l.input = i;
-  return l;
-}
-
-// Le premier de la liste est celui affiché au départ (il doit correspondre au addTo ci-dessus)
-const FONDS = [
-  {nom:'Satellite Esri',   couche:sat},
-  {nom:'Satellite IGN',    couche:ign},
-  {nom:'Photo 1982 (N&B)', couche:photo1982},
-  {nom:'Plan',             couche:plan}
-];
-FONDS.forEach((f, idx) => {
-  document.getElementById('liste-fonds').appendChild(
-    ligne('radio', 'fond', f.nom, idx === 0, c => {
-      if(!c) return;
-      FONDS.forEach(x => map.removeLayer(x.couche));
-      f.couche.addTo(map);
-      if(f.couche !== photo1982 && f.couche.bringToBack) f.couche.bringToBack();
-    })
-  );
-});
-
-// ---- Menu déroulant des cartes ----
-const select = document.getElementById('choix');
-CARTES.forEach((c, i) => select.add(new Option(c.nom, i)));
-
-let overlay = null;
-function afficher(i){
-  const c = CARTES[i];
-  if(overlay) map.removeLayer(overlay);
-  overlay = L.imageOverlay(c.fichier, c.bounds || bounds, {opacity:opacite, pane:'raster'}).addTo(map);
-
-  document.getElementById('lg-nom').textContent = c.unite;
-  document.getElementById('lg-barre').style.background = c.degrade || DEGRADE_DEFAUT;
-
-  const pas = c.pas || (c.max - c.min) / 2;
-  const vals = [];
-  for(let v = c.max; v >= c.min - 1e-9; v -= pas) vals.push(+v.toFixed(2));
-  document.getElementById('lg-vals').innerHTML = vals.map(v => '<span>' + v + '</span>').join('');
-}
-select.addEventListener('change', () => afficher(select.value));
-afficher(0);
-
-// ---- Boutons + / − : opacité de la carte ----
-function majOpacite(){
-  document.getElementById('op-val').textContent = Math.round(opacite * 100) + '%';
-  if(overlay) overlay.setOpacity(opacite);
-}
-document.getElementById('op-plus').addEventListener('click', () => {
-  opacite = Math.min(1, +(opacite + PAS_OPACITE).toFixed(2));
-  majOpacite();
-});
-document.getElementById('op-moins').addEventListener('click', () => {
-  opacite = Math.max(0.1, +(opacite - PAS_OPACITE).toFixed(2));
-  majOpacite();
-});
-majOpacite();
-
-// ---- Étiquettes des arbres (zoom >= ZOOM_MIN_ETIQUETTES) ----
-const etiquettesArbres = L.layerGroup();
-let coucheArbresRef = null;
-let arbresVisibles = true;
-
-function getNomArbre(props){
-  if(!props) return '';
-  if(CHAMP_NOM_ARBRE && props[CHAMP_NOM_ARBRE] != null){
-    return String(props[CHAMP_NOM_ARBRE]).trim();
-  }
-  const candidats = ['identifi', 'nom', 'name', 'espece', 'type', 'libelle', 'label', 'id'];
-  for(const cle of candidats){
-    const trouve = Object.keys(props).find(k => k.toLowerCase() === cle);
-    if(trouve && props[trouve] != null && String(props[trouve]).trim() !== ''){
-      return String(props[trouve]).trim();
-    }
-  }
-  const premiereValeur = Object.values(props).find(v => v != null && String(v).trim() !== '');
-  return premiereValeur ? String(premiereValeur).trim() : '';
-}
-
-function majEtiquettesArbres(){
-  const zoomOk = map.getZoom() >= ZOOM_MIN_ETIQUETTES;
-  const afficherEtiquettes = zoomOk && arbresVisibles && coucheArbresRef && map.hasLayer(coucheArbresRef);
-  if(afficherEtiquettes){
-    if(!map.hasLayer(etiquettesArbres)) map.addLayer(etiquettesArbres);
-  } else if(map.hasLayer(etiquettesArbres)){
-    map.removeLayer(etiquettesArbres);
-  }
-}
-map.on('zoomend', majEtiquettesArbres);
-
-// ---- Vecteurs (shapefiles) ----
-VECTEURS.forEach(v => {
-  v.couche = null;
-  v.visible = true;
-  const estArbres = v.fichier.toLowerCase().includes('arbre');
-
-  const l = ligne('checkbox', null, v.nom, true, on => {
-    v.visible = on;
-    if(v.couche) on ? map.addLayer(v.couche) : map.removeLayer(v.couche);
-    if(estArbres){
-      arbresVisibles = on;
-      majEtiquettesArbres();
-    }
-  });
-  document.getElementById('liste-couches').appendChild(l);
-
-  fetch(v.fichier)
-    .then(r => { if(!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); })
-    .then(buf => shp(buf))
-    .then(geojson => {
-      const rayon = v.rayon || 5;
-      if(estArbres) etiquettesArbres.clearLayers();
-
-      v.couche = L.geoJSON(geojson, {
-        style: {color: v.couleur, weight: v.epaisseur || 2, fillOpacity: 0.1},
-        pointToLayer: (f, latlng) => {
-          const markerPoint = L.circleMarker(latlng, {
-            radius: rayon,
-            color: '#fff',
-            weight: rayon <= 2 ? 0 : 1,
-            fillColor: v.couleur,
-            fillOpacity: 1
-          });
-          if(estArbres){
-            const nom = getNomArbre(f.properties);
-            if(nom){
-              etiquettesArbres.addLayer(
-                L.tooltip({
-                  permanent: true,
-                  direction: 'top',
-                  offset: [0, -4],
-                  className: 'etiquette-arbre'
-                }).setContent(nom).setLatLng(latlng)
-              );
-            }
-          }
-          return markerPoint;
-        },
-        onEachFeature: (f, layer) => {
-          const p = f.properties || {};
-          const texte = Object.keys(p).map(k => '<b>' + k + '</b> : ' + p[k]).join('<br>');
-          if(texte) layer.bindPopup(texte);
-        }
-      });
-
-      if(estArbres) coucheArbresRef = v.couche;
-      if(v.visible) v.couche.addTo(map);
-      if(estArbres) majEtiquettesArbres();
-    })
-    .catch(err => {
-      console.error('Vecteur ' + v.fichier + ' : ' + err);
-      l.classList.add('indispo');
-      l.input.disabled = true;
-      l.append(' (indisponible)');
-    });
-});
-
-// ---- Cadastre IGN (parcelles), case décochée au départ ----
-const cadastre = L.tileLayer.wms('https://data.geopf.fr/wms-r/wms', {
-  layers: 'CADASTRALPARCELS.PARCELLAIRE_EXPRESS',
-  format: 'image/png',
-  transparent: true,
-  version: '1.3.0',
-  detectRetina: true,
-  opacity: 0.8,
-  maxZoom: 23,
-  pane: 'cadastre'
-});
-document.getElementById('liste-couches').appendChild(
-  ligne('checkbox', null, 'Cadastre (parcelles)', false,
-    on => on ? map.addLayer(cadastre) : map.removeLayer(cadastre))
-);
-
-// ---- Décalage manuel du cadastre (en mètres) ----
-// Est positif = vers la droite, Nord positif = vers le haut.
-// Test sans modifier le fichier : ajoute ?ce=3&cn=-2 à l'adresse de la page.
-const params = new URLSearchParams(location.search);
-const DECALAGE_EST_M   = parseFloat(params.get('ce')) || 1;
-const DECALAGE_NORD_M  = parseFloat(params.get('cn')) || 10;
-
-function appliquerDecalageCadastre(){
-  const lat = map.getCenter().lat;
-  const mParPx = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, map.getZoom());
-  const dx =  DECALAGE_EST_M  / mParPx;
-  const dy = -DECALAGE_NORD_M / mParPx;
-  map.getPane('cadastre').style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
-}
-map.on('zoomend moveend viewreset', appliquerDecalageCadastre);
-appliquerDecalageCadastre();
-
-// ---- Position GPS ----
-map.locate({watch:true, enableHighAccuracy:true});
-let marker;
-map.on('locationfound', e => {
-  if(!marker) marker = L.circleMarker(e.latlng,{radius:8,color:'#fff',fillColor:'#1a73e8',fillOpacity:1}).addTo(map);
-  else marker.setLatLng(e.latlng);
-});
-</script>
-</body></html>
+// Photographies aériennes historiques IGN (tuiles WMTS)
+function orthoIGN(couche){
+  return L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=' + couche +
+    '&STYLE=normal&FORMAT=image/jpeg&TILE
